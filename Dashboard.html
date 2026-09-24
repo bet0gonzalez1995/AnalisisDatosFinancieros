@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Participaciones Municipales de Hidalgo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    // Permitir que el plugin AutoTable reconozca el objeto global jsPDF de la versión 2.x
+    window.jsPDF = window.jspdf.jsPDF;
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.12/jspdf.plugin.autotable.min.js"></script>
+
+  <link  rel="stylesheet" href="css/style.css">
+  
+
+
+</head>
+
+<body>
+  <header class="top">
+    <h1>Participaciones municipales de Hidalgo</h1>
+    <p>Distribución de fondos a los 84 municipios · Enero 2025 &ndash; Agosto 2026</p>
+    <nav class="tabs">
+      <button data-view="resumen" class="active">Resumen general</button>
+      <button data-view="municipios">Municipios</button>
+      <button data-view="fondos">Fondos</button>
+      <button data-view="explorar">Explorar datos</button>
+      <!--<button data-view="metodologia">Metodología y hallazgos</button>-->
+    </nav>
+  </header>
+  <div class="wrap">
+    <div class="card" id="uploadPanel">
+      <h3>Cargar las bases de datos</h3>
+      <p class="note">Selecciona <b>BASE_PARTICIPACIONES_2025_CORRECTA.xlsx</b> y
+        <b>BASE_PARTICIPACIONES_2026_CORRECTA.xlsx</b> (puedes elegir ambos archivos a la vez). Los datos se procesan
+        aquí mismo, en tu navegador; el archivo Excel no se envía a ningún servidor.
+      </p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
+      <p class="note" id="uploadStatus"></p>
+    </div>
+
+    <div id="dashboardArea" style="display:none;">
+      <div class="filters">
+        <label>Año<select id="fAnio">
+            <option value="all">2025 y 2026</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select></label>
+        <label>Mes<select id="fMes">
+            <option value="all">Todos</option>
+          </select></label>
+        <label>Municipio<select id="fMun">
+            <option value="all">Todos (estatal)</option>
+          </select></label>
+        <label>Fondo<select id="fFondo">
+            <option value="all">Todos</option>
+          </select></label>
+        <label>&nbsp;<button id="btnReset" type="button"
+            style="padding:7px 14px;border-radius:6px;border:1px solid var(--line);background:var(--bg);cursor:pointer;">Cargar
+            otros archivos</button></label>
+      </div>
+
+      <section class="view active" id="view-resumen">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid2">
+          <div class="card">
+            <h3>Evolución mensual del total distribuido</h3><canvas id="chEvol" height="260"></canvas>
+          </div>
+          <div class="card">
+            <h3>Ene&ndash;ago: 2026 vs 2025</h3><canvas id="chCompare" height="260"></canvas>
+            <p class="note" id="compareNote"></p>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <h3>Municipios: mayor y menor participación</h3><canvas id="chRankTop" height="300"></canvas>
+          </div>
+          <div class="card">
+            <h3>¿Qué nos dicen los datos?</h3>
+            <ul class="hallazgos" id="hallazgos"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-municipios">
+        <div class="card">
+          <h3>Detalle municipal</h3>
+          <label style="font-size:.8rem;color:var(--sub)">Selecciona municipio (o usa el filtro superior)<br>
+            <select id="munDetailSel"
+              style="margin-top:6px;font-size:.9rem;padding:6px;min-width:220px;"></select></label>
+          <div class="kpis" id="munKpis" style="margin-top:14px;"></div>
+          <div class="grid2">
+            <div><canvas id="chMunEvol" height="240"></canvas></div>
+            <div><canvas id="chMunFondos" height="240"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Ranking completo de los 84 municipios (ene&ndash;ago, año seleccionado o ambos)</h3>
+          <div class="exp-table">
+            <table id="tblRanking">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Municipio</th>
+                  <th>Total periodo</th>
+                  <th>% del estado</th>
+                  <th>Var. vs año anterior</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-fondos">
+        <div class="grid2">
+          <div class="card">
+            <h3>Composición por fondo &mdash; estatal</h3><canvas id="chFondoPie" height="280"></canvas>
+          </div>
+          <div class="card">
+            <h3>Importe y % por fondo</h3>
+            <div class="exp-table">
+              <table id="tblFondos">
+                <thead>
+                  <tr>
+                    <th>Fondo</th>
+                    <th>Importe</th>
+                    <th>% del total</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Evolución de cada fondo por mes</h3><canvas id="chFondoEvol" height="280"></canvas>
+        </div>
+      </section>
+
+      <section class="view" id="view-explorar">
+        <div class="card">
+          <h3>Tabla filtrable de importes originales</h3>
+          <p class="note">Responde a los filtros de año, mes y municipio de la barra superior. Valores en pesos; celdas
+            vacías = fondo no reportado ese mes (no se sustituyen por cero).</p>
+          <button id="btnExportPdf" type="button"
+            style="margin-bottom:10px;padding:7px 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-family:inherit;font-size:.85rem;">Exportar
+            a PDF</button>
+          <div class="exp-table">
+            <table id="tblExplorar">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="note" id="expCount"></p>
+        </div>
+      </section>
+      <!--
+      <section class="view" id="view-metodologia">
+        <div class="card">
+          <h3>Metodología y decisiones de limpieza</h3>
+          <ul>
+            <li><b>84 municipios verificados</b> en ambas bases. Se detectó una inconsistencia de nombre entre años
+              (<i>"JUÁREZ"</i> en 2025 vs <i>"JUÁREZ HIDALGO"</i> en 2026, mismo municipio); se unificó como <b>"JUÁREZ
+                HIDALGO"</b> para poder comparar años.</li>
+            <li><b>Fondo de Fomento Municipal 70%/30%</b> es un desglose informativo del Fondo de Fomento Municipal, no
+              un concepto adicional. Se excluyó de las sumas para no duplicar importes; se verificó que el TOTAL de cada
+              fila cuadra exactamente (diferencia menor a $0.01 en las 1,680 filas) al excluir ese desglose.</li>
+            <li><b>Comparación 2025 vs 2026:</b> 2026 solo tiene datos de enero a agosto, así que toda comparación entre
+              años usa el periodo <b>enero&ndash;agosto de ambos años</b>, nunca el año 2025 completo contra el
+              acumulado 2026.</li>
+            <li><b>Datos vacíos:</b> columnas como "Multas por colaboración administrativa", "IEPS Gasolinas Estatal" o
+              "Recaudación del ISR" tienen meses sin valor reportado en algunos municipios. Se dejaron como vacíos (no
+              como cero) en la tabla de exploración; en las sumas y gráficas se tratan como "sin aportación ese mes",
+              que es como ya cuadraba el TOTAL original.</li>
+            <li>No se encontró una "Columna1" vacía en las bases entregadas (posiblemente ya fue retirada); los meses se
+              ordenaron cronológicamente (enero&rarr;diciembre) en todas las vistas.</li>
+            <li>No se recalcularon ni modificaron los importes originales: todas las cifras provienen directamente de
+              las bases <code>BASE_PARTICIPACIONES_2025_CORRECTA.xlsx</code> y
+              <code>BASE_PARTICIPACIONES_2026_CORRECTA.xlsx</code>.
+            </li>
+          </ul>
+          <h3 style="margin-top:18px;">Hallazgos (resumen)</h3>
+          <ul class="hallazgos" id="hallazgos2"></ul>
+        </div>
+      </section>
+      -->
+    </div>
+    <footer>Fuente: bases de participaciones municipales de Hidalgo 2025&ndash;2026 (procesadas localmente en el
+      navegador). Elaborado para práctica de minería de datos.</footer>
+  </div>
+
+
+</body>
+<script src="js/script.js"></script>
+</html>
